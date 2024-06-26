@@ -4,3 +4,4 @@ x32/
 *.filters
 *.user
 *.vcxproj
+*.eep

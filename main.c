@@ -2,12 +2,15 @@
 #include <stdint.h>
 #include <assert.h>
 
-#define TEST 1
+#define TEST 0
+#define ATMEGA_328P_EEPROM_MAX 1024
 
 /* Supposed to create a single line of .eep of .hex file like:
 * 
 :100000000C9434000C9451000C9451000C94510049
 :100010000C9451000C9451000C9451000C9451001C
+...
+:00000001FF
 */
 uint8_t intel2scomplement_checksum(uint8_t* data, uint8_t length)
 {
@@ -36,6 +39,9 @@ uint8_t intel2scomplement_checksum(uint8_t* data, uint8_t length)
     return (uint8_t)(acc);
 
 }
+
+
+
 int main(int argc, char** argv)
 {
     printf("Program------------------Start\n");
@@ -52,20 +58,82 @@ int main(int argc, char** argv)
     printf("All fine!\n");
 #endif
 
-    FILE* fptr = fopen(argv[argc - 1], "r");
-    assert(fptr != NULL);
+    FILE* fr = fopen(argv[argc - 1], "r");
+    FILE* fw = fopen("EEPROM.eep", "w");
+
+    uint8_t eeprom_buff[ATMEGA_328P_EEPROM_MAX] = {0};
+
+    assert(fr != NULL);
+    assert(fw != NULL);
 
     char c = 0;
+    int length = 0;
 
     while (c != '\n' && c != EOF)
-    {   
-        c = getc(fptr);
-        printf("%c", c);
+    {
+        c = getc(fr);
+        eeprom_buff[length++] = c;
     }
 
+    printf("Length is: %d bytes\n", length);
 
-    fclose(fptr);
+    // SIZE ADR TYPE DATA CHEKSUM
+
+    int size = (length < 16) ? length : 16;
+    int type = 00;
+    int adr = 0x0000;
+    int processed_length = length;
+    int byte = 0;
+    for (byte = 0; byte < length; byte++)
+    {
+        if (byte % 16 == 0)
+        {
+            if (byte != 0)
+            {
+                uint8_t calc_buffer[20] = { 0 };
+
+                calc_buffer[0] = (uint8_t)size;
+                calc_buffer[1] = (uint8_t)((adr & 0xFF00) >> 8);
+                calc_buffer[2] = (uint8_t)(adr & 0x00FF);
+                calc_buffer[3] = (uint8_t)type;
+                memcpy(calc_buffer + 4, eeprom_buff + byte - size, size);
+
+                fprintf(fw, "%02x", intel2scomplement_checksum(calc_buffer, size + 4));
+                fprintf(fw, "\n");
+                adr+=16;
+                processed_length -= size;
+                size = (processed_length < 16) ? processed_length : 16;
+                if (size < 16)
+                {
+                    type = 0x00;
+                }
+            }
+            else
+            {
+
+            }
+            fprintf(fw, ":%02x%04x%02x", size, adr, type);
+        }
+        fprintf(fw, "%02x", (char)eeprom_buff[byte]);
+    }
+
+    uint8_t calc_buffer[20] = { 0 };
+
+    calc_buffer[0] = (uint8_t)size;
+    calc_buffer[1] = (uint8_t)((adr & 0xFF00) >> 8);
+    calc_buffer[2] = (uint8_t)(adr & 0x00FF);
+    calc_buffer[3] = (uint8_t)type;
+    memcpy(calc_buffer + 4, eeprom_buff + byte - size, size);
+
+    fprintf(fw, "%02x", intel2scomplement_checksum(calc_buffer, size + 4));
+
+    fprintf(fw, "\n:00000001FF\n");
+
+    fclose(fr);
+    fclose(fw);
 
     printf("Program------------------Done\n");
+
+    return 0;
 
 }
