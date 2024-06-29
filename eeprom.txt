@@ -1,2 +1,1 @@
-Text with a name - Martin.
-
+This is just a normal record my friend from stout.
